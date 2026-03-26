@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'db/database_helper.dart';
 import 'screens/home_screen.dart';
-import 'services/database_service.dart';
 
 // ─────────────────────────────────────────────────────────────
 //  🔑 REPLACE these with your Supabase project credentials
