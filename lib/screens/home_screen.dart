@@ -224,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<String> get _availableCategories =>
       _items.map((i) => i.category).toSet().toList();
 
-  double get _totalEst   => _items.fold(0, (s, i) => s + i.estimatedPrice);
+  double get _totalEst   => _items.where((i) => !i.isDeleted).fold(0, (s, i) => s + i.estimatedPrice);
   double get _totalActual => _items.fold(0, (s, i) => s + (i.actualPrice ?? 0));
   int    get _boughtCount => _items.where((i) => i.isBought).length;
 
@@ -798,14 +798,15 @@ class _BudgetTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final est    = items.fold(0.0, (s, i) => s + i.estimatedPrice);
-    final actual = items.fold(0.0, (s, i) => s + (i.actualPrice ?? 0));
-    final bought = items.where((i) => i.isBought).length;
+    final activeItems = items.where((i) => !i.isDeleted).toList();
+    final est    = activeItems.fold(0.0, (s, i) => s + i.estimatedPrice);
+    final actual = activeItems.fold(0.0, (s, i) => s + (i.actualPrice ?? 0));
+    final bought = activeItems.where((i) => i.isBought).length;
     final remaining = (est - actual).clamp(0.0, double.infinity);
     final pct = est > 0 ? (actual / est).clamp(0.0, 1.2) : 0.0;
 
     final byCat = kCategories.map((catKey) {
-      final rows = items.where((i) => i.category == catKey).toList();
+      final rows = activeItems.where((i) => i.category == catKey).toList();
       return (
         key: catKey,
         emoji: kCategoryIcons[catKey] ?? '📦',
