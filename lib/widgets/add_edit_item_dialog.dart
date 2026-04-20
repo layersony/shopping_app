@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/shopping_item.dart';
+import '../theme.dart';
 
 class AddEditItemDialog extends StatefulWidget {
   final ShoppingItem? item;
@@ -22,17 +23,15 @@ class _AddEditItemDialogState extends State<AddEditItemDialog> {
   void initState() {
     super.initState();
     final item = widget.item;
-    _nameCtrl = TextEditingController(text: item?.name ?? '');
+    _nameCtrl      = TextEditingController(text: item?.name ?? '');
     _estimatedCtrl = TextEditingController(
       text: item != null ? item.estimatedPrice.toStringAsFixed(2) : '',
     );
     _actualCtrl = TextEditingController(
-      text: item?.actualPrice != null
-          ? item!.actualPrice!.toStringAsFixed(2)
-          : '',
+      text: item?.actualPrice != null ? item!.actualPrice!.toStringAsFixed(2) : '',
     );
-    _notesCtrl = TextEditingController(text: item?.notes ?? '');
-    _selectedCategory = item?.category ?? kCategories.first;
+    _notesCtrl         = TextEditingController(text: item?.notes ?? '');
+    _selectedCategory  = item?.category ?? kCategories.first;
   }
 
   @override
@@ -48,32 +47,28 @@ class _AddEditItemDialogState extends State<AddEditItemDialog> {
     if (_formKey.currentState!.validate()) {
       final existing = widget.item;
       final now = DateTime.now().toUtc();
-      final result = ShoppingItem(
-        id: existing?.id ?? const Uuid().v4(),
-        name: _nameCtrl.text.trim(),
-        category: _selectedCategory,
+      Navigator.of(context).pop(ShoppingItem(
+        id:             existing?.id ?? const Uuid().v4(),
+        name:           _nameCtrl.text.trim(),
+        category:       _selectedCategory,
         estimatedPrice: double.parse(_estimatedCtrl.text),
-        actualPrice: _actualCtrl.text.isNotEmpty
-            ? double.parse(_actualCtrl.text)
-            : null,
-        isBought: existing?.isBought ?? false,
-        notes: _notesCtrl.text.trim().isNotEmpty
-            ? _notesCtrl.text.trim()
-            : null,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      );
-      Navigator.of(context).pop(result);
+        actualPrice:    _actualCtrl.text.isNotEmpty ? double.parse(_actualCtrl.text) : null,
+        isBought:       existing?.isBought ?? false,
+        notes:          _notesCtrl.text.trim().isNotEmpty ? _notesCtrl.text.trim() : null,
+        createdAt:      existing?.createdAt ?? now,
+        updatedAt:      now,
+      ));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.item != null;
-    final theme = Theme.of(context);
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: context.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kSheetRadius)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -82,88 +77,189 @@ class _AddEditItemDialogState extends State<AddEditItemDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                isEdit ? 'Edit Item' : 'Add Item',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                ),
+              // ── Title row ──────────────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isEdit ? 'EDIT' : 'NEW',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                          color: context.subColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isEdit ? (widget.item!.name) : 'Add item',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                          color: context.inkColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: context.bgColor,
+                        border: Border.all(color: context.borderColor),
+                      ),
+                      child: Icon(Icons.close, size: 18, color: context.inkColor),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
+
+              // ── Name ───────────────────────────────────
+              _label('Name', context),
               TextFormField(
                 controller: _nameCtrl,
-                decoration: _dec('Item Name', Icons.shopping_bag_outlined),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
+                autofocus: true,
                 textCapitalization: TextCapitalization.words,
+                style: TextStyle(fontSize: 16, color: context.inkColor),
+                decoration: _inputDec(context, 'e.g. Sourdough loaf'),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                decoration: _dec('Category', Icons.category_outlined),
-                items: kCategories
-                    .map((c) => DropdownMenuItem(
-                          value: c,
-                          child: Row(children: [
-                            Text(kCategoryIcons[c] ?? '📦'),
-                            const SizedBox(width: 8),
-                            Text(c),
-                          ]),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedCategory = v!),
+
+              // ── Category chips ─────────────────────────
+              _label('Category', context),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: kCategories.map((cat) {
+                  final selected = _selectedCategory == cat;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedCategory = cat),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: selected ? context.inkColor : Colors.transparent,
+                        borderRadius: BorderRadius.circular(kChipRadius),
+                        border: Border.all(
+                          color: selected ? context.inkColor : context.borderColor,
+                        ),
+                      ),
+                      child: Text(
+                        '${kCategoryIcons[cat] ?? "📦"} $cat',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? context.bgColor : context.inkColor,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 14),
+
+              // ── Estimated / Actual ─────────────────────
               Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      controller: _estimatedCtrl,
-                      decoration: _dec('Estimated', Icons.attach_money),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Required';
-                        if (double.tryParse(v) == null) return 'Invalid';
-                        return null;
-                      },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Estimated', context),
+                        TextFormField(
+                          controller: _estimatedCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          style: TextStyle(fontSize: 16, color: context.inkColor),
+                          decoration: _inputDec(context, '0.00'),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Required';
+                            if (double.tryParse(v) == null) return 'Invalid';
+                            return null;
+                          },
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextFormField(
-                      controller: _actualCtrl,
-                      decoration: _dec('Actual', Icons.price_check),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      validator: (v) {
-                        if (v != null &&
-                            v.isNotEmpty &&
-                            double.tryParse(v) == null) return 'Invalid';
-                        return null;
-                      },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Actual', context),
+                        TextFormField(
+                          controller: _actualCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          style: TextStyle(fontSize: 16, color: context.inkColor),
+                          decoration: _inputDec(context, '—'),
+                          validator: (v) {
+                            if (v != null && v.isNotEmpty && double.tryParse(v) == null) {
+                              return 'Invalid';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
+
+              // ── Notes ──────────────────────────────────
+              _label('Notes', context),
               TextFormField(
                 controller: _notesCtrl,
-                decoration: _dec('Notes (optional)', Icons.notes_outlined),
                 maxLines: 2,
+                style: TextStyle(fontSize: 16, color: context.inkColor),
+                decoration: _inputDec(context, 'Optional'),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+
+              // ── Buttons ─────────────────────────────────
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: context.borderColor),
+                          borderRadius: BorderRadius.circular(kInputRadius),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text('Cancel',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: context.inkColor)),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _submit,
-                    child: Text(isEdit ? 'Save' : 'Add'),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: GestureDetector(
+                      onTap: _submit,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: context.inkColor,
+                          borderRadius: BorderRadius.circular(kInputRadius),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          isEdit ? 'Save changes' : 'Add item',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.bgColor),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -174,11 +270,44 @@ class _AddEditItemDialogState extends State<AddEditItemDialog> {
     );
   }
 
-  InputDecoration _dec(String label, IconData icon) => InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 20),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  Widget _label(String text, BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          text.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: context.subColor,
+          ),
+        ),
+      );
+
+  InputDecoration _inputDec(BuildContext context, String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: context.muteColor),
+        filled: true,
+        fillColor: context.bgColor,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kInputRadius),
+          borderSide: BorderSide(color: context.borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kInputRadius),
+          borderSide: BorderSide(color: context.borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kInputRadius),
+          borderSide: BorderSide(color: context.inkColor, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kInputRadius),
+          borderSide: const BorderSide(color: Color(0xFFB91C1C)),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(kInputRadius),
+          borderSide: const BorderSide(color: Color(0xFFB91C1C), width: 1.5),
+        ),
       );
 }
