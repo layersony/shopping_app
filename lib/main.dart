@@ -1,25 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'db/database_helper.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  🔑 REPLACE these with your Supabase project credentials
-//  Found at: https://app.supabase.com → Project Settings → API
-// ─────────────────────────────────────────────────────────────
-const _supabaseUrl = '';
-const _supabaseAnonKey = '';
-// ─────────────────────────────────────────────────────────────
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: '.env');
 
   await DatabaseHelper.initFactory();
 
   await Supabase.initialize(
-    url: _supabaseUrl,
-    anonKey: _supabaseAnonKey,
+    url: dotenv.env['SUPABASE_URL'] ?? '',
+    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
 
   runApp(const ShoppingApp());

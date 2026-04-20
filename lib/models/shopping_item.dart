@@ -102,8 +102,8 @@ class ShoppingItem {
 }
 
 const List<String> kCategories = [
-  'Food & Grocery',
-  'Kitchen',
+  'Soko',
+  'Supa',
   'Home',
   'Bedroom',
   'Bathroom',
@@ -115,8 +115,8 @@ const List<String> kCategories = [
 ];
 
 const Map<String, String> kCategoryIcons = {
-  'Food & Grocery': '🛒',
-  'Kitchen': '🍳',
+  'Soko': '🏪',
+  'Supa': '🛒',
   'Home': '🏠',
   'Bedroom': '🛏️',
   'Bathroom': '🚿',

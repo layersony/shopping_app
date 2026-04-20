@@ -32,7 +32,21 @@ class DatabaseHelper {
   Future<Database> _initDB() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'shopping.db');
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Rename legacy categories to match current names
+      await db.execute(
+        "UPDATE shopping_items SET category = 'Supa' WHERE category IN ('Kitchen', 'Food & Grocery')",
+      );
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -102,6 +116,19 @@ class DatabaseHelper {
     final db = await instance.database;
     await db.insert('shopping_items', item.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> resetAll() async {
+    final db = await instance.database;
+    await db.update(
+      'shopping_items',
+      {
+        'is_bought': 0,
+        'actual_price': null,
+        'is_deleted': 0,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
   }
 
   Future<List<ShoppingItem>> getUpdatedSince(DateTime since) async {

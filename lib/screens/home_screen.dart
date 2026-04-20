@@ -30,8 +30,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
 
   SyncStatus _syncStatus = SyncStatus.idle;
-  SyncResult? _lastSyncResult;
-  DateTime? _lastSynced;
 
   @override
   void initState() {
@@ -83,7 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _startSync() async {
     setState(() => _syncStatus = SyncStatus.syncing);
-    final result = await SyncService.sync();
+    SyncResult result = await SyncService.sync();
 
     if (result.status == SyncStatus.conflict) {
       if (!mounted) return;
@@ -93,28 +91,109 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => ConflictResolutionDialog(conflicts: result.conflicts),
       );
       if (resolved == null) {
-        setState(() { _syncStatus = SyncStatus.idle; _lastSyncResult = null; });
+        setState(() => _syncStatus = SyncStatus.idle);
         return;
       }
       setState(() => _syncStatus = SyncStatus.syncing);
-      final finalResult = await SyncService.syncAfterResolution(resolvedItems: resolved);
-      setState(() {
-        _syncStatus = finalResult.status;
-        _lastSyncResult = finalResult;
-        if (finalResult.status == SyncStatus.success) _lastSynced = DateTime.now();
-      });
-    } else {
-      setState(() {
-        _syncStatus = result.status;
-        _lastSyncResult = result;
-        if (result.status == SyncStatus.success) _lastSynced = DateTime.now();
-      });
+      result = await SyncService.syncAfterResolution(resolvedItems: resolved);
     }
 
+    setState(() => _syncStatus = result.status);
     await _loadItems();
+    if (!mounted) return;
+
+    _showSyncSnackBar(result);
+
     if (_syncStatus == SyncStatus.success || _syncStatus == SyncStatus.error) {
       await Future.delayed(const Duration(seconds: 4));
       if (mounted) setState(() => _syncStatus = SyncStatus.idle);
+    }
+  }
+
+  void _showSyncSnackBar(SyncResult result) {
+    final String message;
+    final Color bgColor;
+    final IconData icon;
+
+    switch (result.status) {
+      case SyncStatus.success:
+        final pushed = result.pushed;
+        final pulled = result.pulled;
+        if (pushed == 0 && pulled == 0) {
+          message = 'Already up to date';
+        } else {
+          final parts = <String>[];
+          if (pushed > 0) parts.add('↑ $pushed pushed');
+          if (pulled > 0) parts.add('↓ $pulled pulled');
+          message = parts.join(' · ');
+        }
+        bgColor = const Color(0xFF15803D);
+        icon = Icons.cloud_done_outlined;
+      case SyncStatus.error:
+        message = result.errorMessage ?? 'Sync failed';
+        bgColor = const Color(0xFFB91C1C);
+        icon = Icons.cloud_off_outlined;
+      case SyncStatus.conflict:
+        message = '${result.conflicts.length} conflict(s) — resolve them to continue';
+        bgColor = const Color(0xFFB45309);
+        icon = Icons.warning_amber_outlined;
+      default:
+        return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: bgColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _resetList() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kSheetRadius)),
+        title: Text('Reset list?', style: TextStyle(color: context.inkColor, fontWeight: FontWeight.w700)),
+        content: Text(
+          'This will mark all items as not bought, clear actual prices, and restore deleted items.',
+          style: TextStyle(color: context.subColor, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: context.subColor)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reset', style: TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await DatabaseHelper.instance.resetAll();
+      await _loadItems();
     }
   }
 
@@ -170,22 +249,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 totalActual: _totalActual,
                 boughtCount: _boughtCount,
                 isDark: widget.isDark,
-                syncStatus: _syncStatus,
-                lastSyncResult: _lastSyncResult,
-                lastSynced: _lastSynced,
                 onToggleDark: widget.onToggleDark,
                 onToggleShowBought: () => setState(() => _showBought = !_showBought),
                 onFilterChange: (f) => setState(() => _filter = f),
                 onToggleBought: _toggleBought,
                 onEdit: _editItem,
                 onDelete: _deleteItem,
-                onSync: _startSync,
+                onRefresh: _startSync,
               ),
               _CategoriesTab(
                 items: _items,
                 onPick: (cat) => setState(() { _filter = cat; _tab = 0; }),
               ),
-              _BudgetTab(items: _items),
+              _BudgetTab(items: _items, onReset: _resetList),
             ],
           ),
 
@@ -346,16 +422,13 @@ class _HomeTab extends StatelessWidget {
   final double totalActual;
   final int boughtCount;
   final bool isDark;
-  final SyncStatus syncStatus;
-  final SyncResult? lastSyncResult;
-  final DateTime? lastSynced;
   final VoidCallback onToggleDark;
   final VoidCallback onToggleShowBought;
   final ValueChanged<String> onFilterChange;
   final ValueChanged<ShoppingItem> onToggleBought;
   final ValueChanged<ShoppingItem> onEdit;
   final ValueChanged<ShoppingItem> onDelete;
-  final VoidCallback onSync;
+  final Future<void> Function() onRefresh;
 
   const _HomeTab({
     required this.items,
@@ -368,16 +441,13 @@ class _HomeTab extends StatelessWidget {
     required this.totalActual,
     required this.boughtCount,
     required this.isDark,
-    required this.syncStatus,
-    required this.lastSyncResult,
-    required this.lastSynced,
     required this.onToggleDark,
     required this.onToggleShowBought,
     required this.onFilterChange,
     required this.onToggleBought,
     required this.onEdit,
     required this.onDelete,
-    required this.onSync,
+    required this.onRefresh,
   });
 
   @override
@@ -385,7 +455,11 @@ class _HomeTab extends StatelessWidget {
     final dateStr = DateFormat('EEEE · MMMM d').format(DateTime.now());
     final grouped = filteredGrouped;
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: context.inkColor,
+      backgroundColor: context.surfaceColor,
+      child: ListView(
       padding: const EdgeInsets.only(bottom: 160),
       children: [
         // ── Header ─────────────────────────────────────────
@@ -408,19 +482,6 @@ class _HomeTab extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      _IconBtn(
-                        onTap: onSync,
-                        child: syncStatus == SyncStatus.syncing
-                            ? SizedBox(
-                                width: 18, height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: context.inkColor,
-                                ),
-                              )
-                            : Icon(Icons.sync_outlined, size: 18, color: context.inkColor),
-                      ),
-                      const SizedBox(width: 6),
                       _IconBtn(
                         onTap: onToggleDark,
                         child: Icon(
@@ -581,6 +642,7 @@ class _HomeTab extends StatelessWidget {
             ),
           ),
       ],
+      ),
     );
   }
 }
@@ -730,8 +792,9 @@ class _ItemRow extends StatelessWidget {
 // ── Budget Tab ────────────────────────────────────────────────
 class _BudgetTab extends StatelessWidget {
   final List<ShoppingItem> items;
+  final Future<void> Function() onReset;
 
-  const _BudgetTab({required this.items});
+  const _BudgetTab({required this.items, required this.onReset});
 
   @override
   Widget build(BuildContext context) {
@@ -761,9 +824,33 @@ class _BudgetTab extends StatelessWidget {
                 letterSpacing: 0.3, color: context.subColor)),
         Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 20),
-          child: Text('Budget',
-              style: TextStyle(fontSize: 34, fontWeight: FontWeight.w700,
-                  letterSpacing: -1, color: context.inkColor, height: 1.05)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text('Budget',
+                  style: TextStyle(fontSize: 34, fontWeight: FontWeight.w700,
+                      letterSpacing: -1, color: context.inkColor, height: 1.05)),
+              GestureDetector(
+                onTap: onReset,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFB91C1C)),
+                    borderRadius: BorderRadius.circular(kChipRadius),
+                  ),
+                  child: const Text(
+                    'Reset',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFB91C1C),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
 
         // ── Headline card ───────────────────────────────
